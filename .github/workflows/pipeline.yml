@@ -1,0 +1,74 @@
+name: CI - Lint / Tests / Deploy # nome do processo 
+
+on: [push] # condicional, toda vez que um push for feito, um novo job é adicionado
+
+jobs:
+
+  lint: #verificador de sintaxe, quer saber se o arquivo ta certinho
+    runs-on: ubuntu-20.04 # esta sendo rodado na plataforma ubuntu 20.04
+
+    steps: #passos para rodar a aplicação corretamente
+      - uses: actions/checkout@v2 # necessário para a aplicação executar
+
+      - name: Set up Python 3.9 # configurar o python
+        uses: actions/setup-python@v2 # usando isso aqui
+        with:
+          python-version: 3.9 # a versão do python
+
+      - name: Install dependencies # instalação das dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8
+      # o job roda os comandos no terminal pra instalar o python e o lint
+      # abaixo se usam comandos de python para fazer a verificação de sintaxe com o lint
+      - name: Lint with flake8
+        run: |
+          # stop the build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+  tests: # o job de testes
+    needs: lint # precisa que o passo de lint seja concluído
+    runs-on: ubuntu-20.04 # roda nesse so
+    strategy: # a estratégia usada pra testar em várias versões do python é usar uma matriz que contém
+      matrix: # todas as versões do python pra garantir compatibilidade com todas elas.
+        python-version: [3.5, 3.6, 3.7, 3.8, 3.9]
+
+    steps:
+      - uses: actions/checkout@v2 # padrão que precisa ser usado
+
+      - name: Set up Python ${{ matrix.python-version }} # será executado para 5 passos diferentes, um 
+        uses: actions/setup-python@v2                    # em cada versão do python
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies # novamente a instalação das dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Integrations Test # execução do arquivo abaixo
+        run: | 
+          python test.py
+
+
+  deploy: # depende do passo de teste que depende do passo de lint
+    needs: tests
+    runs-on: ubuntu-20.04
+
+    steps: 
+      - uses: actions/checkout@v2
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - name: deploy into heroku
+        uses: akhileshns/heroku-deploy@v3.12.12 # action que realiza o deploy deixando disponível
+        with: # secrets do repositorio q são as variáveis de ambiente
+          heroku_api_key: ${{secrets.HEROKU_API_KEY}}
+          heroku_app_name: ${{secrets.HEROKU_APP_NAME}}
+          heroku_email: ${{secrets.HEROKU_USER_EMAIL}}
